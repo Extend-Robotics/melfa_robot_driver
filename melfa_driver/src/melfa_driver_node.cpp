@@ -44,7 +44,9 @@ int main (int argc, char **argv)
   ros::param::param<double>("~period", period, 0.0071);
   
   // create hardware interface 
+  ROS_WARN("Calling the robot interface");
   MelfaHW robot(period);
+  ROS_WARN("Return from the robot interface");  
   controller_manager::ControllerManager cm (&robot, nh);
 
   // diagnostic_updater
@@ -76,22 +78,30 @@ int main (int argc, char **argv)
   ros::Rate rate (1.0 / robot.getPeriod().toSec());
   ros::AsyncSpinner spinner (1);
   spinner.start ();
-
+  bool reconnection_required;
   // write first setting packet
   robot.write_first ();
 
   while (ros::ok ())
   {
+    if (ros::param::has("/reconnection_required")) 
+    {
+      ros::param::get("/reconnection_required", reconnection_required);
+    }
+    if(reconnection_required)
+    {
+      robot.write_first();
+    }
     // Wait for reciving a packet
     robot.read ();
     cm.update (ros::Time::now(), robot.getPeriod());
     robot.write ();
-
     // Update diagnostics
     updater.update();
-
     rate.sleep ();
   }
   spinner.stop ();
   return 0;
 }
+
+

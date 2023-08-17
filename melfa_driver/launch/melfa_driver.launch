@@ -7,6 +7,7 @@
   <arg name="robot_ip" default="127.0.0.1"/>
   <arg name="realtime" default="false"/>
   <arg name="period" default="0.0071"/>
+  <param name="/extend_trajectory_available" type="bool" value="true" />
 
   <!-- Start MELFA driver -->
   <node name="melfa_driver" pkg="melfa_driver" type="melfa_driver_node">

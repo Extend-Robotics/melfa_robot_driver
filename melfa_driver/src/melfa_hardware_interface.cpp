@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "melfa_driver/melfa_hardware_interface.h"
+#include <cstdlib>
 
 MelfaHW::MelfaHW (double period)
   : counter_(0), period_(period),
@@ -94,7 +95,6 @@ void MelfaHW::write_first (void)
   send_buff_.BitMask = 0;
   send_buff_.IoData = 0;
   send_buff_.CCount = 0;
-
   int size = sendto (socket_, (char *) &send_buff_, sizeof (send_buff_), 0, (struct sockaddr *) &addr_, sizeof (addr_));
   if (size != sizeof (send_buff_))
   {
@@ -105,6 +105,8 @@ void MelfaHW::write_first (void)
 
 void MelfaHW::write (void)
 {
+  bool extend_trajectory_available;
+  bool clear_error_completed;
   // Send MOVE command
   memset (&send_buff_, 0, sizeof (send_buff_));
   send_buff_.Command = MXT_CMD_MOVE;
@@ -143,8 +145,31 @@ void MelfaHW::write (void)
   {
     send_buff_.dat.jnt.j8 = cmd[7];
   }
+  if (ros::param::has("/extend_trajectory_available")) 
+  {
+    ros::param::get("/extend_trajectory_available", extend_trajectory_available);
+  }
+  if(!extend_trajectory_available)
+  {
+    return;
+  }
+  if (ros::param::has("/clear_error_completed")) 
+  {
+    ros::param::get("/clear_error_completed", clear_error_completed);
+  }
+  if(clear_error_completed)
+  {
+    for (int i = 0; i < JOINT_NUM; i++)
+    {
+      if(abs(cmd[i] - pos[i]) > 0.01)
+      {
+        return;
+      }
+    }
+    ros::param::set("/clear_error_completed", false); 
+    counter_ = 1;
+  }
   send_buff_.CCount = counter_;
-
   int size = sendto (socket_, (char *) &send_buff_, sizeof (send_buff_), 0, (struct sockaddr *) &addr_, sizeof (addr_));
   if (size != sizeof (send_buff_))
   {
@@ -183,7 +208,9 @@ void MelfaHW::read (void)
       ROS_ERROR ("recvfrom failed");
       exit (1);
     }
+
     JOINT *joint = (JOINT *) & recv_buff_.dat;
+    
     pos[0] = joint->j1;
     pos[1] = joint->j2;
     pos[2] = joint->j3;
@@ -217,11 +244,15 @@ void MelfaHW::read (void)
       {
         cmd[i] = pos[i];
       }
+      ros::param::set("/reconnection_required", false);
+      ros::param::set("/robot_joint_as_command", true);
+      ros::param::set("/melfa_not_connected", false);
     }
     counter_++;
   }
   else
   {
+    counter_ = 0;
     ROS_WARN ("Failed to receive packet.");
   }
 }
@@ -244,3 +275,4 @@ void MelfaHW::diagnose(diagnostic_updater::DiagnosticStatusWrapper &stat)
   }
   stat.add ("Period", diff);
 }
+
